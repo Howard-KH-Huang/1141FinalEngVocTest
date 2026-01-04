@@ -14,17 +14,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
-        
-        /* 基礎設定 */
-        body { 
-            font-family: 'Noto Sans TC', sans-serif; 
-            background-color: #FFF5E1; 
-            overscroll-behavior-y: none; /* 防止下拉重整 */
-            -webkit-tap-highlight-color: transparent; /* 移除點擊高亮 */
-        }
-        
-        /* 動態高度適配移動端 */
-        .h-dvh { height: 100dvh; }
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #FFF5E1; }
         
         /* 撒花動畫 */
         @keyframes confetti-fall { 
@@ -34,16 +24,14 @@
         .animate-confetti-fall { animation: confetti-fall linear infinite; }
         
         /* 自定義捲軸 */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #FFD166; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #FFD166; border-radius: 10px; border: 2px solid white; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #FFB000; }
         
         /* 其他樣式 */
         .lucide { width: 1.5rem; height: 1.5rem; vertical-align: middle; display: inline-block; }
         .text-shadow { text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-        
-        /* iOS 輸入框防縮放優化 */
-        input { font-size: 16px !important; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         
         /* 進度條動畫 */
@@ -83,6 +71,7 @@
 
         const SPELLING_WORDS_LIST = ["gap", "gut", "cap", "cut", "gum", "cat", "gas", "cop", "van", "vest", "fan", "fest", "vat", "fat", "vet", "fox", "zip", "Zack", "sip", "sack", "zit", "sit", "zag", "sun", "where", "bathroom", "bedroom", "kitchen", "dining room", "living room", "bird", "rabbit", "turtle", "dog", "fish", "house", "friend", "bat", "ghost", "spider", "ready"];
 
+        // 穩定的圖示元件
         const LucideIcon = ({ name, className = "" }) => {
             const iconRef = useRef(null);
             useEffect(() => {
@@ -94,6 +83,7 @@
             return <span ref={iconRef} className="inline-flex items-center justify-center min-w-[1.5rem] min-h-[1.5rem]"></span>;
         };
 
+        // 撒花元件
         const ConfettiRain = () => {
             const pieces = Array.from({ length: 80 });
             const dopamineColors = ['#FF9A9E', '#FAD0C4', '#FBC2EB', '#A18CD1', '#84FAB0', '#8FD3F4', '#FFD166', '#06D6A0'];
@@ -115,6 +105,21 @@
                     ))}
                 </div>
             );
+        };
+
+        // PCM 轉 WAV 工具
+        const pcmToWav = (pcmBase64, sampleRate = 24000) => {
+            const binaryString = atob(pcmBase64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
+            const pcmData = new Int16Array(bytes.buffer);
+            const buffer = new ArrayBuffer(44 + pcmData.length * 2);
+            const view = new DataView(buffer);
+            const writeString = (offset, string) => { for (let i = 0; i < string.length; i++) { view.setUint8(offset + i, string.charCodeAt(i)); } };
+            writeString(0, 'RIFF'); view.setUint32(4, 36 + pcmData.length * 2, true); writeString(8, 'WAVE'); writeString(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeString(36, 'data'); view.setUint32(40, pcmData.length * 2, true);
+            for (let i = 0; i < pcmData.length; i++) { view.setInt16(44 + i * 2, pcmData[i], true); }
+            return new Blob([buffer], { type: 'audio/wav' });
         };
 
         const App = () => {
@@ -140,6 +145,17 @@
 
             useEffect(() => { fetchLeaderboard(); }, []);
 
+            // 預先載入語音列表
+            useEffect(() => {
+                const loadVoices = () => {
+                    const voices = window.speechSynthesis.getVoices();
+                };
+                loadVoices();
+                if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                    window.speechSynthesis.onvoiceschanged = loadVoices;
+                }
+            }, []);
+
             useEffect(() => {
                 if (gameState === 'RESULT' && score >= 60) {
                     setShowConfetti(true);
@@ -148,22 +164,28 @@
                 }
             }, [gameState, score]);
 
+            // [修正] 計時器邏輯：只負責倒數，不依賴 score 等變數
             useEffect(() => {
                 if (gameState === 'QUIZ') {
                     timerRef.current = setInterval(() => {
                         setTimeLeft(prev => {
-                            if (prev <= 1) { 
-                                clearInterval(timerRef.current); 
-                                finishQuiz(score, userAnswers, 0); 
-                                return 0; 
-                            }
+                            if (prev <= 0) return 0;
                             return prev - 1;
                         });
                     }, 1000);
-                } else clearInterval(timerRef.current);
+                }
                 return () => clearInterval(timerRef.current);
-            }, [gameState, score, userAnswers]);
+            }, [gameState]);
 
+            // [修正] 時間到檢查邏輯：當時間歸零時觸發結束，這裡依賴最新狀態
+            useEffect(() => {
+                if (timeLeft === 0 && gameState === 'QUIZ') {
+                    clearInterval(timerRef.current);
+                    finishQuiz(score, userAnswers, 0); 
+                }
+            }, [timeLeft, gameState, score, userAnswers, dbRowIndex]);
+
+            // 自動播放邏輯：題目切換時觸發
             useEffect(() => {
                 if (gameState === 'QUIZ' && questions[currentIndex]) {
                     const q = questions[currentIndex];
@@ -207,20 +229,51 @@
 
             const formatTimeDisplay = (s) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
 
+            // 使用瀏覽器內建 TTS (針對 iOS/Android/Chromebook 優化)
             const speakText = (text) => {
                 return new Promise((resolve, reject) => {
                     if (!window.speechSynthesis) {
-                        alert("您的瀏覽器不支援發音功能");
                         return reject("No TTS");
                     }
+                    
                     window.speechSynthesis.cancel();
+
                     const utterance = new SpeechSynthesisUtterance(text);
-                    utterance.lang = 'en-US';
-                    utterance.rate = 0.8;
-                    utterance.onend = () => resolve();
-                    utterance.onerror = (e) => reject(e);
-                    window.speechSynthesis.speak(utterance);
+                    utterance.lang = 'en-US'; 
+                    utterance.rate = 0.8; 
+
+                    const voices = window.speechSynthesis.getVoices();
+                    const preferredVoice = voices.find(v => 
+                        v.name === 'Samantha' || 
+                        v.name === 'Google US English' || 
+                        (v.name.includes('Google') && v.lang.includes('en-US')) ||
+                        v.lang === 'en-US'
+                    );
+                    
+                    if (preferredVoice) {
+                        utterance.voice = preferredVoice;
+                    }
+                    
+                    utterance.onend = () => {
+                        resolve();
+                    };
+                    
+                    utterance.onerror = (e) => {
+                        console.error("TTS Error:", e);
+                        resolve();
+                    };
+
+                    setTimeout(() => {
+                         window.speechSynthesis.speak(utterance);
+                    }, 10);
                 });
+            };
+
+            const warmUpTTS = () => {
+                if (window.speechSynthesis) {
+                    const utterance = new SpeechSynthesisUtterance('');
+                    window.speechSynthesis.speak(utterance);
+                }
             };
 
             const triggerAutoPlay = async (word) => {
@@ -251,6 +304,9 @@
                     alert("請完整填寫班級、座號與姓名！");
                     return;
                 }
+                
+                warmUpTTS();
+
                 setIsSyncing(true);
                 try {
                     const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'start', ...studentInfo }) });
@@ -271,6 +327,7 @@
                     ...w, type: 'TEXT', section: '第二大題：看英選中',
                     options: [...WORD_BANK.filter(x => x.en !== w.en).sort(() => Math.random() - 0.5).slice(0, 3).map(x => x.zh), w.zh].sort(() => Math.random() - 0.5)
                 }));
+
                 setQuestions([...qListen, ...qText, ...qSpelling]);
                 setGameState('QUIZ');
                 setIsSyncing(false);
