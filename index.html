@@ -107,21 +107,6 @@
             );
         };
 
-        // PCM 轉 WAV 工具
-        const pcmToWav = (pcmBase64, sampleRate = 24000) => {
-            const binaryString = atob(pcmBase64);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
-            const pcmData = new Int16Array(bytes.buffer);
-            const buffer = new ArrayBuffer(44 + pcmData.length * 2);
-            const view = new DataView(buffer);
-            const writeString = (offset, string) => { for (let i = 0; i < string.length; i++) { view.setUint8(offset + i, string.charCodeAt(i)); } };
-            writeString(0, 'RIFF'); view.setUint32(4, 36 + pcmData.length * 2, true); writeString(8, 'WAVE'); writeString(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeString(36, 'data'); view.setUint32(40, pcmData.length * 2, true);
-            for (let i = 0; i < pcmData.length; i++) { view.setInt16(44 + i * 2, pcmData[i], true); }
-            return new Blob([buffer], { type: 'audio/wav' });
-        };
-
         const App = () => {
             const [gameState, setGameState] = useState('INFO');
             const [studentInfo, setStudentInfo] = useState({ class: '', seat: '', name: '' });
@@ -164,7 +149,6 @@
                 }
             }, [gameState, score]);
 
-            // [修正] 計時器邏輯：只負責倒數，不依賴 score 等變數
             useEffect(() => {
                 if (gameState === 'QUIZ') {
                     timerRef.current = setInterval(() => {
@@ -177,7 +161,6 @@
                 return () => clearInterval(timerRef.current);
             }, [gameState]);
 
-            // [修正] 時間到檢查邏輯：當時間歸零時觸發結束，這裡依賴最新狀態
             useEffect(() => {
                 if (timeLeft === 0 && gameState === 'QUIZ') {
                     clearInterval(timerRef.current);
@@ -185,7 +168,6 @@
                 }
             }, [timeLeft, gameState, score, userAnswers, dbRowIndex]);
 
-            // 自動播放邏輯：題目切換時觸發
             useEffect(() => {
                 if (gameState === 'QUIZ' && questions[currentIndex]) {
                     const q = questions[currentIndex];
@@ -243,12 +225,28 @@
                     utterance.rate = 0.8; 
 
                     const voices = window.speechSynthesis.getVoices();
-                    const preferredVoice = voices.find(v => 
-                        v.name === 'Samantha' || 
-                        v.name === 'Google US English' || 
-                        (v.name.includes('Google') && v.lang.includes('en-US')) ||
-                        v.lang === 'en-US'
-                    );
+                    // iOS 優先選擇 Samantha，Android/Chrome 選擇 Google US English，其次是任何包含 Enhanced 的語音
+                    let preferredVoice = voices.find(v => v.name === 'Samantha'); 
+                    
+                    if (!preferredVoice) {
+                        preferredVoice = voices.find(v => v.name.includes('Samantha'));
+                    }
+                    
+                    if (!preferredVoice) {
+                        preferredVoice = voices.find(v => v.name === 'Google US English');
+                    }
+
+                    if (!preferredVoice) {
+                         preferredVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Enhanced'));
+                    }
+                    
+                    if (!preferredVoice) {
+                         preferredVoice = voices.find(v => ['Aaron', 'Fred', 'Nicky'].includes(v.name));
+                    }
+
+                    if (!preferredVoice) {
+                        preferredVoice = voices.find(v => v.lang === 'en-US');
+                    }
                     
                     if (preferredVoice) {
                         utterance.voice = preferredVoice;
