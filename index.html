@@ -1,0 +1,473 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { User, GraduationCap, ChevronRight, CheckCircle2, XCircle, Trophy, RefreshCcw, Volume2, Loader2, ListOrdered, Headphones, Keyboard, Send, MousePointer2, Sparkles, PartyPopper, Ban, Clock, Check, Medal, Crown } from 'lucide-react';
+
+// --- 配置區 ---
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwsxMCSMVvzWtSe46HVwXoPFQyLiXyOUVLCr4HKqZ3ZZLZoDUJkOiCvQrdxPhur2Vdydw/exec"; 
+const apiKey = ""; 
+
+const WORD_BANK = [
+  { en: "gap", zh: "間隙" }, { en: "gut", zh: "腸道" }, { en: "cap", zh: "鴨舌帽" },
+  { en: "cut", zh: "切;剪" }, { en: "gum", zh: "口香糖" }, { en: "cat", zh: "貓" },
+  { en: "gas", zh: "瓦斯" }, { en: "cop", zh: "警察" }, { en: "Van", zh: "箱型車" },
+  { en: "vest", zh: "背心" }, { en: "fan", zh: "電風扇" }, { en: "fest", zh: "節日" },
+  { en: "vat", zh: "桶" }, { en: "fat", zh: "胖的" }, { en: "vet", zh: "獸醫" },
+  { en: "fox", zh: "狐狸" }, { en: "zip", zh: "拉鍊" }, { en: "Zack", zh: "男子名" },
+  { en: "sip", zh: "啜飲" }, { en: "sack", zh: "麻布袋" }, { en: "zit", zh: "痘痘;疹子" },
+  { en: "sit", zh: "坐下" }, { en: "zag", zh: "急轉" }, { en: "sun", zh: "太陽" },
+  { en: "where", zh: "哪裡" }, { en: "bathroom", zh: "浴室" }, { en: "bedroom", zh: "臥房" },
+  { en: "kitchen", zh: "廚房" }, { en: "dining room", zh: "飯廳" }, { en: "living room", zh: "客廳" },
+  { en: "bird", zh: "鳥" }, { en: "rabbit", zh: "兔子" }, { en: "turtle", zh: "烏龜" },
+  { en: "dog", zh: "狗" }, { en: "fish", zh: "魚" }, { en: "house", zh: "房子" },
+  { en: "friend", zh: "朋友" }, { en: "bat", zh: "蝙蝠" }, { en: "ghost", zh: "鬼" },
+  { en: "jack-o'-lantern", zh: "南瓜燈" }, { en: "spider", zh: "蜘蛛" },
+  { en: "Trick or treat.", zh: "不給糖就搗蛋" }, { en: "Happy Halloween.", zh: "萬聖節快樂" },
+  { en: "ready", zh: "準備好的" }, { en: "Good job.", zh: "做的好" }, { en: "Welcome.", zh: "歡迎。" },
+  { en: "Good afternoon.", zh: "午安。" }, { en: "It's tea time.", zh: "喝茶時間到了" },
+  { en: "Please help yourself.", zh: "請自便。" }
+];
+
+const SPELLING_WORDS_LIST = ["gap", "gut", "cap", "cut", "gum", "cat", "gas", "cop", "van", "vest", "fan", "fest", "vat", "fat", "vet", "fox", "zip", "Zack", "sip", "sack", "zit", "sit", "zag", "sun", "where", "bathroom", "bedroom", "kitchen", "dining room", "living room", "bird", "rabbit", "turtle", "dog", "fish", "house", "friend", "bat", "ghost", "spider", "ready"];
+
+const pcmToWav = (pcmBase64, sampleRate = 24000) => {
+  const binaryString = atob(pcmBase64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
+  const pcmData = new Int16Array(bytes.buffer);
+  const buffer = new ArrayBuffer(44 + pcmData.length * 2);
+  const view = new DataView(buffer);
+  const writeString = (offset, string) => { for (let i = 0; i < string.length; i++) { view.setUint8(offset + i, string.charCodeAt(i)); } };
+  writeString(0, 'RIFF'); view.setUint32(4, 36 + pcmData.length * 2, true); writeString(8, 'WAVE'); writeString(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeString(36, 'data'); view.setUint32(40, pcmData.length * 2, true);
+  for (let i = 0; i < pcmData.length; i++) { view.setInt16(44 + i * 2, pcmData[i], true); }
+  return new Blob([buffer], { type: 'audio/wav' });
+};
+
+const ConfettiRain = () => {
+  const pieces = Array.from({ length: 80 });
+  const dopamineColors = ['#FF9A9E', '#FAD0C4', '#FBC2EB', '#A18CD1', '#84FAB0', '#8FD3F4', '#FFD166', '#06D6A0'];
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden">
+      {pieces.map((_, i) => (
+        <div key={i} className="absolute animate-confetti-fall"
+          style={{
+            left: `${Math.random() * 100}%`,
+            backgroundColor: dopamineColors[Math.floor(Math.random() * dopamineColors.length)],
+            width: `${Math.random() * 12 + 6}px`, height: `${Math.random() * 12 + 6}px`,
+            borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+            animationDelay: `${Math.random() * 5}s`, animationDuration: `${Math.random() * 3 + 2}s`, opacity: Math.random() * 0.5 + 0.5,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+const App = () => {
+  const [gameState, setGameState] = useState('INFO');
+  const [studentInfo, setStudentInfo] = useState({ class: '', seat: '', name: '' });
+  const [questions, setQuestions] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [userAnswers, setUserAnswers] = useState([]);
+  const [score, setScore] = useState(0);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [spellingInput, setSpellingInput] = useState('');
+  const [tempSelection, setTempSelection] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [playCounts, setPlayCounts] = useState(new Array(20).fill(0));
+  const [timeLeft, setTimeLeft] = useState(900);
+  const [dbRowIndex, setDbRowIndex] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
+  
+  const audioRef = useRef(null);
+  const inputRef = useRef(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    fetchLeaderboard();
+  }, []);
+
+  useEffect(() => {
+    if (gameState === 'RESULT' && score >= 60) {
+      setShowConfetti(true);
+      const timer = setTimeout(() => { setShowConfetti(false); }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState, score]);
+
+  useEffect(() => {
+    if (gameState === 'QUIZ') {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) { 
+            clearInterval(timerRef.current); 
+            finishQuiz(score, userAnswers, 0); 
+            return 0; 
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [gameState, score, userAnswers]);
+
+  const fetchLeaderboard = async () => {
+    try {
+      setIsLoadingLeaderboard(true);
+      const res = await fetch(SCRIPT_URL);
+      const data = await res.json();
+      setLeaderboard(data.leaderboard || []);
+    } catch (e) {
+      console.error("無法取得排行榜:", e);
+    } finally {
+      setIsLoadingLeaderboard(false);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const formatDurationChinese = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}分${secs}秒`;
+  };
+
+  // 取得鼓勵用語邏輯
+  const getEncouragement = (s) => {
+    if (s === 100) return "完美達成！你是英語單字小超人，獲得滿分榮譽！🏆";
+    if (s >= 90) return "超群絕倫！表現非常優秀，離滿分只剩一步之遙！✨";
+    if (s >= 80) return "表現優異！你對單字非常熟悉，繼續保持這股氣勢！👍";
+    if (s >= 70) return "做得好！你已經掌握大部分單字了，再加油一點點！💪";
+    if (s >= 60) return "太棒了！及格囉！有進步的空間，下次挑戰更高分！😊";
+    return "別氣餒！再多練習一下，下次一定可以及格的，加油！🔥";
+  };
+
+  const fetchTTS = async (text, retryCount = 0) => {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Please say the word clearly: ${text}` }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } }
+          }
+        })
+      });
+      if (!response.ok) throw new Error('TTS API Error');
+      const data = await response.json();
+      const pcmData = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+      if (!pcmData) throw new Error('No audio data received');
+      return URL.createObjectURL(pcmToWav(pcmData));
+    } catch (error) {
+      if (retryCount < 5) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+        return fetchTTS(text, retryCount + 1);
+      }
+      return null;
+    }
+  };
+
+  const playAudio = async () => {
+    if (isAudioLoading || playCounts[currentIndex] >= 2) return;
+    setIsAudioLoading(true);
+    const url = await fetchTTS(questions[currentIndex].en);
+    if (url) {
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        audioRef.current.play().catch(e => console.error("Audio play failed", e));
+      }
+      const newCounts = [...playCounts];
+      newCounts[currentIndex] += 1;
+      setPlayCounts(newCounts);
+    }
+    setIsAudioLoading(false);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  const startQuiz = async () => {
+    if (!studentInfo.class || !studentInfo.seat || !studentInfo.name) return;
+    setIsSyncing(true);
+    if (SCRIPT_URL) {
+      try {
+        const res = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'start', class: studentInfo.class, seat: studentInfo.seat, name: studentInfo.name })
+        });
+        const data = await res.json();
+        if (data.rowIndex) setDbRowIndex(data.rowIndex);
+      } catch (e) { console.error("同步失敗:", e); }
+    }
+
+    const shuffledFull = [...WORD_BANK].sort(() => Math.random() - 0.5);
+    const spellingPool = WORD_BANK.filter(word => SPELLING_WORDS_LIST.some(sw => sw.toLowerCase() === word.en.toLowerCase())).sort(() => Math.random() - 0.5);
+    const pickedSpellingRaw = spellingPool.slice(0, 5);
+    const pickedSpellingSet = new Set(pickedSpellingRaw.map(w => w.en));
+    const listeningPool = shuffledFull.filter(w => !pickedSpellingSet.has(w.en));
+    const pickedListeningRaw = listeningPool.slice(0, 5);
+    const pickedListeningSet = new Set(pickedListeningRaw.map(w => w.en));
+    const textPool = listeningPool.filter(w => !pickedListeningSet.has(w.en));
+    const pickedTextRaw = textPool.slice(0, 10);
+
+    const part1 = pickedListeningRaw.map(word => ({
+      ...word,
+      options: [...WORD_BANK.filter(w => w.en !== word.en).sort(() => Math.random() - 0.5).slice(0, 3).map(w => w.en), word.en].sort(() => Math.random() - 0.5),
+      type: 'LISTENING_SELECT', section: '第一大題：聽音選字'
+    }));
+    const part2 = pickedTextRaw.map(word => ({
+      ...word,
+      options: [...WORD_BANK.filter(w => w.en !== word.en).sort(() => Math.random() - 0.5).slice(0, 3).map(w => w.zh), word.zh].sort(() => Math.random() - 0.5),
+      type: 'TEXT', section: '第二大題：看英選中'
+    }));
+    const part3 = pickedSpellingRaw.map(word => ({ ...word, type: 'SPELLING', section: '第三大題：聽音拼字' }));
+
+    setQuestions([...part1, ...part2, ...part3]);
+    setCurrentIndex(0);
+    setUserAnswers([]);
+    setScore(0);
+    setSpellingInput('');
+    setTempSelection(null);
+    setPlayCounts(new Array(20).fill(0));
+    setTimeLeft(900);
+    setIsSyncing(false);
+    setGameState('QUIZ');
+  };
+
+  const handleConfirmAnswer = () => {
+    const currentQ = questions[currentIndex];
+    let isCorrect = false;
+    let userVal = "";
+    if (currentQ.type === 'SPELLING') {
+      userVal = spellingInput.trim();
+      isCorrect = userVal.toLowerCase() === currentQ.en.toLowerCase();
+    } else {
+      userVal = tempSelection;
+      isCorrect = (currentQ.type === 'LISTENING_SELECT' ? userVal === currentQ.en : userVal === currentQ.zh);
+    }
+    const newAnswers = [...userAnswers, { en: currentQ.en, selected: userVal || "(未選擇)", correct: currentQ.type === 'TEXT' ? currentQ.zh : currentQ.en, isCorrect, type: currentQ.type, section: currentQ.section }];
+    const currentScore = isCorrect ? score + 5 : score;
+    setUserAnswers(newAnswers);
+    if (isCorrect) setScore(currentScore);
+    setSpellingInput('');
+    setTempSelection(null);
+    if (currentIndex < 19) setCurrentIndex(currentIndex + 1);
+    else finishQuiz(currentScore, newAnswers, timeLeft);
+  };
+
+  const finishQuiz = async (finalScore, finalAnswers, remainingTime) => {
+    setGameState('RESULT');
+    setIsSyncing(true);
+    if (SCRIPT_URL && dbRowIndex) {
+      const errorList = finalAnswers.filter(a => !a.isCorrect).map(a => a.en).join(', ');
+      const durationStr = formatDurationChinese(900 - remainingTime);
+      try {
+        await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'end', rowIndex: dbRowIndex, score: finalScore, duration: durationStr, errors: errorList })
+        });
+      } catch (e) { console.error("更新成績失敗:", e); }
+    }
+    setIsSyncing(false);
+    fetchLeaderboard();
+  };
+
+  const currentQuestion = questions[currentIndex];
+  const currentPlayCount = playCounts[currentIndex];
+
+  return (
+    <div className="min-h-screen bg-[#FFF5E1] flex items-center justify-center p-4 font-sans text-slate-800">
+      <audio ref={audioRef} hidden />
+      {showConfetti && <ConfettiRain />}
+      
+      <div className="max-w-xl w-full bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-8 border-white ring-1 ring-pink-100 flex flex-col">
+        <div className="bg-gradient-to-br from-[#FF416C] via-[#FF4B2B] to-[#FF8C00] p-8 text-center relative overflow-hidden border-b-4 border-white/20 shrink-0">
+          <div className="absolute top-0 right-0 p-4 opacity-20"><Sparkles className="w-24 h-24 text-white animate-pulse" /></div>
+          <h1 className="text-3xl font-black tracking-tight text-white drop-shadow-md relative z-10 text-nowrap text-shadow">萬來國小英語單字測驗平台</h1>
+          <p className="text-white font-black mt-3 relative z-10 tracking-widest text-sm bg-black/20 backdrop-blur-md inline-block px-6 py-1.5 rounded-full border border-white/30 shadow-inner">114-1_四年級英語第二次評量單字</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto max-h-[70vh] custom-scrollbar">
+          {gameState === 'INFO' && (
+            <div className="p-8 space-y-8 text-center animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="space-y-3">
+                <div className="bg-[#E0F7FA] w-20 h-20 rounded-3xl flex items-center justify-center mx-auto rotate-3 shadow-sm"><GraduationCap className="w-10 h-10 text-[#00ACC1]" /></div>
+                <h2 className="text-2xl font-black text-[#FF6B6B]">Hello! 準備好挑戰了嗎？</h2>
+                <p className="text-slate-400 text-sm font-medium tracking-wide">請填寫基本資料後點擊下方出發</p>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <input type="text" placeholder="班級" className="flex-1 px-5 py-4 rounded-2xl border-4 border-[#F3E5F5] bg-[#F3E5F5]/30 focus:border-[#CE93D8] outline-none font-bold placeholder:text-slate-300 transition-all" value={studentInfo.class} onChange={(e) => setStudentInfo({ ...studentInfo, class: e.target.value })} />
+                  <input type="number" placeholder="座號" className="w-28 px-5 py-4 rounded-2xl border-4 border-[#FFF3E0] bg-[#FFF3E0]/40 focus:border-[#FFB74D] outline-none font-bold placeholder:text-slate-300 transition-all text-center" value={studentInfo.seat} onChange={(e) => setStudentInfo({ ...studentInfo, seat: e.target.value })} />
+                </div>
+                <input type="text" placeholder="你的姓名" className="w-full px-5 py-4 rounded-2xl border-4 border-[#E8F5E9] bg-[#E8F5E9]/40 focus:border-[#81C784] outline-none font-bold placeholder:text-slate-300 transition-all text-center" value={studentInfo.name} onChange={(e) => setStudentInfo({ ...studentInfo, name: e.target.value })} />
+              </div>
+
+              <button onClick={startQuiz} disabled={isSyncing} className={`w-full text-white font-black text-xl py-5 rounded-3xl shadow-lg transition transform flex items-center justify-center gap-3 ${isSyncing ? 'bg-slate-400' : 'bg-[#FF6B6B] hover:bg-[#FF5252] hover:-translate-y-1 active:scale-95'}`}>
+                {isSyncing ? <Loader2 className="animate-spin" /> : <>出發囉！ <ChevronRight className="w-6 h-6" /></>}
+              </button>
+
+              <div className="pt-4 space-y-4 text-center">
+                <div className="flex items-center justify-center gap-2 text-[#FFA000] font-black uppercase tracking-widest text-lg border-t-2 border-dashed border-slate-100 pt-6">
+                  <Crown className="w-6 h-6 animate-bounce" /> 榮譽排行榜 (Top 10)
+                </div>
+                {isLoadingLeaderboard ? (
+                  <div className="flex flex-col items-center gap-2 py-8 text-slate-300"><Loader2 className="w-8 h-8 animate-spin" /><p className="text-sm font-bold">載入排行中...</p></div>
+                ) : leaderboard.length > 0 ? (
+                  <div className="bg-white rounded-3xl border-4 border-slate-50 overflow-hidden shadow-inner mx-auto max-w-[90%]">
+                    <table className="w-full text-sm font-bold">
+                      <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase tracking-tighter"><tr><th className="py-3 px-2">名次</th><th className="py-3 px-2 text-left">姓名</th><th className="py-3 px-2">分數</th><th className="py-3 px-2">作答時間</th></tr></thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {leaderboard.map((entry, idx) => (
+                          <tr key={idx} className={`${idx === 0 ? 'bg-yellow-50/50' : ''} transition-colors hover:bg-slate-50`}>
+                            <td className="py-4 px-2 text-center">{idx === 0 ? "🏆" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : <span className="text-slate-300">#{idx + 1}</span>}</td>
+                            <td className="py-4 px-2 text-left font-bold"><p className="text-slate-700 truncate max-w-[80px]">{entry.name}</p><p className="text-[10px] text-slate-400">{entry.class}班</p></td>
+                            <td className="py-4 px-2 text-[#FF4B2B] font-black text-base text-center">{entry.score}</td>
+                            <td className="py-4 px-2 text-slate-400 text-[10px] font-bold text-right">{entry.durationDisplay}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-10 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200"><p className="text-slate-300 font-bold text-sm italic">尚無測驗紀錄，快來當第一名！</p></div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {gameState === 'QUIZ' && currentQuestion && (
+            <div className="p-8 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="mb-10 flex justify-between items-end">
+                <div className="flex flex-col gap-1">
+                  <span className="bg-[#FFE082] text-[#FF8F00] text-[10px] font-black px-2 py-0.5 rounded-md uppercase w-fit tracking-tighter">{currentQuestion.section.split('：')[0]}</span>
+                  <h3 className="text-xl font-black text-slate-700">第 {currentIndex + 1} 題</h3>
+                  <div className="w-40 bg-slate-100 h-3 rounded-full mt-2 overflow-hidden shadow-inner"><div className="bg-gradient-to-r from-[#FF9A9E] to-[#06D6A0] h-full rounded-full transition-all duration-700" style={{ width: `${((currentIndex + 1) / 20) * 100}%` }}></div></div>
+                </div>
+                <div className="flex flex-col items-end">
+                  <div className={`flex items-center gap-2 font-black text-xl px-4 py-2 rounded-2xl shadow-sm transition-colors ${timeLeft < 60 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-orange-100 text-orange-600'}`}>
+                    <Clock className="w-5 h-5" /> {formatTime(timeLeft)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center mb-8 min-h-[180px] flex flex-col items-center justify-center bg-gradient-to-b from-[#FAFAFA] to-white rounded-[2rem] p-6 border-4 border-[#F1F1F1] shadow-sm relative">
+                {(currentQuestion.type === 'SPELLING' || currentQuestion.type === 'LISTENING_SELECT') ? (
+                  <div className="space-y-4 w-full text-center">
+                    <div className="flex items-center justify-center gap-2 text-[#00BCD4] font-black uppercase text-xs tracking-widest">
+                      {currentQuestion.type === 'SPELLING' ? <Keyboard className="w-4 h-4" /> : <MousePointer2 className="w-4 h-4" />}
+                      {currentQuestion.type === 'SPELLING' ? '聽音拼寫' : '聽音選字'}
+                    </div>
+                    <div className="flex flex-col items-center gap-4">
+                      <button onClick={playAudio} disabled={currentPlayCount >= 2 || isAudioLoading} className={`group p-8 rounded-[2.5rem] shadow-xl transition-all border-8 border-white ${currentPlayCount >= 2 ? 'bg-slate-200 shadow-none grayscale' : 'bg-[#FFD166] hover:bg-[#FFC107] hover:scale-105 active:scale-95'}`}>
+                        {isAudioLoading ? <Loader2 className="w-12 h-12 text-white animate-spin" /> : currentPlayCount >= 2 ? <Ban className="w-12 h-12 text-slate-400" /> : <Volume2 className="w-12 h-12 text-white" />}
+                      </button>
+                      <div className={`px-4 py-1 rounded-full font-black text-xs transition-colors ${currentPlayCount >= 2 ? 'bg-slate-100 text-slate-400' : 'bg-[#FFF9C4] text-[#FFA000]'}`}>{currentPlayCount >= 2 ? '次數已用完' : `剩餘次數: ${2 - currentPlayCount} / 2`}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4 text-center">
+                    <div className="flex items-center justify-center gap-2 text-[#81C784] font-black uppercase text-xs tracking-widest"><ListOrdered className="w-4 h-4" /> 字義測驗</div>
+                    <h2 className="text-6xl font-black text-slate-800 drop-shadow-sm tracking-tighter leading-tight">{currentQuestion.en}</h2>
+                  </div>
+                )}
+              </div>
+
+              {currentQuestion.type === 'SPELLING' ? (
+                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <input ref={inputRef} type="text" placeholder="在此拼出單字..." className="w-full p-6 text-3xl text-center font-black text-[#673AB7] border-4 border-[#D1C4E9] bg-[#EDE7F6]/30 rounded-3xl focus:border-[#673AB7] focus:ring-4 focus:ring-purple-100 outline-none uppercase placeholder:text-slate-200 transition-all" value={spellingInput} onChange={(e) => setSpellingInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && spellingInput.trim() && handleConfirmAnswer()} />
+                  <button onClick={() => spellingInput.trim() && handleConfirmAnswer()} disabled={!spellingInput.trim()} className="w-full bg-[#06D6A0] disabled:bg-slate-200 text-white font-black text-xl py-5 rounded-3xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95">確認送出 <Send className="w-6 h-6" /></button>
+                </div>
+              ) : (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="grid grid-cols-1 gap-3">
+                    {currentQuestion.options.map((opt, i) => {
+                      const colors = ["bg-[#FF9A9E] border-[#FF8085]", "bg-[#A18CD1] border-[#8E7CC3]", "bg-[#4FACFE] border-[#3890FF]", "bg-[#00F2FE] border-[#00DBE4]"];
+                      const isSelected = tempSelection === opt;
+                      return (
+                        <button key={i} onClick={() => setTempSelection(opt)} className={`w-full p-4 text-left border-b-8 rounded-2xl transition-all flex items-center shadow-md relative group ${isSelected ? 'bg-gradient-to-r from-yellow-400 to-orange-400 border-orange-500 scale-[1.02] translate-y-1 border-b-0 ring-4 ring-orange-200 text-white' : `${colors[i % 4]} text-white hover:scale-[1.01]`}`}>
+                          <span className={`w-8 h-8 flex items-center justify-center bg-white/20 rounded-lg mr-4 font-black text-lg ${isSelected ? 'bg-white text-orange-500' : ''}`}>{String.fromCharCode(65 + i)}</span>
+                          <span className="text-xl font-black tracking-tight">{opt}</span>
+                          {isSelected && <div className="absolute right-4"><Check className="w-6 h-6 animate-pulse" /></div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button onClick={handleConfirmAnswer} disabled={!tempSelection} className={`w-full py-5 rounded-3xl font-black text-xl shadow-lg transition-all flex items-center justify-center gap-2 transform ${!tempSelection ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-[#FF6B6B] hover:bg-[#FF5252] text-white hover:-translate-y-1 active:scale-95'}`}>確定答案，下一題 <ChevronRight className="w-6 h-6" /></button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {gameState === 'RESULT' && (
+            <div className="p-8 space-y-8 text-center animate-in fade-in zoom-in duration-500">
+              <div className="inline-block p-6 bg-[#FFF9C4] rounded-full shadow-xl relative ring-4 ring-white">
+                {score >= 60 && <div className="absolute -top-4 -right-4 bg-pink-500 text-white p-2 rounded-full animate-bounce shadow-lg"><PartyPopper className="w-6 h-6" /></div>}
+                <Trophy className={`w-20 h-20 text-[#FBC02D] ${score >= 60 ? 'animate-bounce' : ''}`} />
+              </div>
+              
+              {/* 動態鼓勵用語區塊 */}
+              <div className="px-4">
+                <h2 className="text-3xl font-black text-slate-800 tracking-tighter drop-shadow-sm leading-tight">
+                  {getEncouragement(score)}
+                </h2>
+              </div>
+
+              <div className="p-8 bg-gradient-to-br from-[#FF9A9E] to-[#FBC2EB] rounded-[3rem] text-white shadow-2xl inline-block px-14 border-4 border-white max-w-full overflow-hidden">
+                <div className="text-xs font-black uppercase tracking-[0.3em] mb-2 opacity-80">{studentInfo.class} CLASS / NO.{studentInfo.seat}</div>
+                <h3 className="text-3xl font-black mb-4 truncate">{studentInfo.name}</h3>
+                <div className="bg-white/20 p-4 rounded-3xl backdrop-blur-sm border border-white/30"><div className="flex items-baseline justify-center gap-2"><span className="text-8xl font-black drop-shadow-lg leading-none">{score}</span><span className="text-2xl font-black opacity-80">PTS</span></div></div>
+              </div>
+              
+              {isSyncing && <div className="text-indigo-600 font-black animate-pulse text-sm flex items-center justify-center gap-2 bg-indigo-50 py-2 rounded-full"><Loader2 className="w-4 h-4 animate-spin" /> 成績更新中...</div>}
+              
+              <div className="max-h-64 overflow-y-auto pr-2 space-y-3 custom-scrollbar px-1">
+                {userAnswers.map((ans, i) => (
+                  <div key={i} className={`flex items-center justify-between p-4 rounded-3xl border-2 bg-white transition-shadow hover:shadow-md ${ans.isCorrect ? 'border-[#81C784] bg-green-50/20' : 'border-[#EF9A9A] bg-red-50/20'}`}>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2"><span className="font-black text-slate-700 truncate max-w-[120px]">{ans.en}</span></div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{ans.section.split('：')[1]}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {!ans.isCorrect && <span className="text-sm font-black text-[#EF9A9A] line-through decoration-2">{ans.selected}</span>}
+                      {ans.isCorrect ? <CheckCircle2 className="w-8 h-8 text-[#4CAF50] drop-shadow-sm" /> : <XCircle className="w-8 h-8 text-[#F44336] drop-shadow-sm" />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => { setGameState('INFO'); setShowConfetti(false); window.location.reload(); }} className="w-full bg-slate-900 text-white font-black text-xl py-5 rounded-3xl shadow-xl flex items-center justify-center gap-2 transition-all hover:bg-black active:scale-95"><RefreshCcw className="w-6 h-6" /> 再戰一場！</button>
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 bg-white/80 backdrop-blur-md text-center border-t border-slate-100 shrink-0">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-pink-400 animate-ping"></div>
+            <p className="text-[#FF9A9E] text-[9px] font-black uppercase tracking-[0.2em]">Wanlai Elementary School • 114-1_Vocabulary Quiz System</p>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes confetti-fall { 0% { transform: translateY(-10vh) rotate(0deg); } 100% { transform: translateY(110vh) rotate(720deg); } }
+        .animate-confetti-fall { animation-name: confetti-fall; animation-timing-function: linear; animation-iteration-count: infinite; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #FFD166; border-radius: 10px; border: 2px solid white; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #FFB000; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .text-shadow { text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;
